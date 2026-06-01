@@ -12,7 +12,7 @@ class ChamaSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'contribution_amount',
                   'frequency', 'created_by', 'created_at', 'is_active',
                   'max_members', 'member_count']
-        read_only_fields = ['id', 'created_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'is_active']
 
     def get_member_count(self, obj):
         return obj.memberships.filter(is_active=True).count()
