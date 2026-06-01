@@ -1,0 +1,210 @@
+{% extends 'core/base.html' %}
+{% block title %}Live Draw - Chama Smart{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12">
+
+    <!-- Header -->
+    <div class="text-center mb-10">
+        <h1 class="text-4xl font-bold text-gray-800 mb-2">🎡 Live Chama Draw</h1>
+        <p class="text-gray-500">Fair, transparent, and powered by cryptographic randomness</p>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginSection" class="bg-white rounded-2xl shadow-sm border p-8 mb-6">
+        <h2 class="text-xl font-semibold mb-4">Admin Login</h2>
+        <input id="phoneInput" type="text" placeholder="Phone number e.g. 0712345678"
+            class="w-full border rounded-lg px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <input id="passwordInput" type="password" placeholder="Password"
+            class="w-full border rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-green-500">
+        <button onclick="login()"
+            class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition">
+            Login & Start Draw
+        </button>
+        <p id="loginError" class="text-red-500 text-sm mt-2 hidden"></p>
+    </div>
+
+    <!-- Wheel Section (hidden until draw starts) -->
+    <div id="drawSection" class="hidden">
+
+        <!-- Wheel Canvas -->
+        <div class="bg-white rounded-2xl shadow-sm border p-8 mb-6 text-center">
+            <canvas id="wheelCanvas" width="400" height="400"
+                class="mx-auto rounded-full shadow-lg"></canvas>
+            <div class="mt-2 text-2xl">▲</div>
+        </div>
+
+        <!-- Spin Button -->
+        <button id="spinBtn" onclick="spinWheel()"
+            class="w-full bg-green-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-green-700 transition shadow-lg">
+            🎡 SPIN THE WHEEL
+        </button>
+
+        <!-- Winner Announcement (hidden until spin ends) -->
+        <div id="winnerCard" class="hidden mt-8 bg-green-50 border-2 border-green-400 rounded-2xl p-8 text-center">
+            <div class="text-6xl mb-4">🏆</div>
+            <h2 class="text-3xl font-bold text-green-700 mb-2" id="winnerName"></h2>
+            <p class="text-xl text-green-600 mb-1">has won the draw!</p>
+            <p class="text-3xl font-bold text-green-800 mt-4" id="prizeAmount"></p>
+            <p class="text-gray-500 text-sm mt-2">M-Pesa payout will be processed shortly</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let authToken = null;
+    let drawData = null;
+    let spinning = false;
+
+    // ── Login and immediately fetch draw result ──
+    async function login() {
+        const phone = document.getElementById('phoneInput').value;
+        const password = document.getElementById('passwordInput').value;
+        const errorEl = document.getElementById('loginError');
+
+        try {
+            const res = await fetch('/api/accounts/login/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({phone_number: phone, password})
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                errorEl.textContent = 'Invalid credentials';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            authToken = data.access;
+
+            // Start the draw
+            const drawRes = await fetch('/api/chamas/1/draw/start/', {
+                method: 'POST',
+                headers: {'Authorization': `Bearer ${authToken}`}
+            });
+            drawData = await drawRes.json();
+
+            if (!drawRes.ok) {
+                errorEl.textContent = drawData.error || 'Could not start draw';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('drawSection').classList.remove('hidden');
+            drawWheel(drawData.wheel_segments);
+
+        } catch (e) {
+            errorEl.textContent = 'Something went wrong. Is the server running?';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    // ── Draw the wheel on canvas ──
+    function drawWheel(segments) {
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const radius = cx - 10;
+        const arc = (2 * Math.PI) / segments.length;
+
+        const colors = [
+            '#16a34a','#15803d','#166534','#4ade80',
+            '#22c55e','#86efac','#dcfce7','#bbf7d0'
+        ];
+
+        segments.forEach((seg, i) => {
+            // Slice
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, radius, i * arc, (i + 1) * arc);
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Label
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(i * arc + arc / 2);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText(seg.name, radius - 10, 5);
+            ctx.restore();
+        });
+
+        // Center circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, 30, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.fillStyle = '#16a34a';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('SPIN', cx, cy + 4);
+    }
+
+    // ── Spin animation ──
+    function spinWheel() {
+        if (spinning || !drawData) return;
+        spinning = true;
+
+        document.getElementById('spinBtn').disabled = true;
+        document.getElementById('spinBtn').textContent = '🎡 Spinning...';
+
+        const canvas = document.getElementById('wheelCanvas');
+        const segments = drawData.wheel_segments;
+        const winnerIndex = segments.findIndex(s => s.is_winner);
+        const arc = 360 / segments.length;
+
+        // Calculate final angle to land on winner
+        const targetAngle = 360 - (winnerIndex * arc + arc / 2);
+        const extraSpins = 1440; // 4 full spins for drama
+        const finalAngle = extraSpins + targetAngle;
+
+        let currentAngle = 0;
+        let startTime = null;
+        const duration = 4000; // 4 seconds
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease out cubic — starts fast, slows to stop
+            const eased = 1 - Math.pow(1 - progress, 3);
+            currentAngle = finalAngle * eased;
+
+            // Rotate canvas
+            canvas.style.transform = `rotate(${currentAngle}deg)`;
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Spin complete — reveal winner
+                setTimeout(revealWinner, 500);
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    // ── Reveal winner ──
+    function revealWinner() {
+        const winner = drawData.winner;
+        const prize = drawData.prize_amount;
+
+        document.getElementById('winnerName').textContent = winner.name;
+        document.getElementById('prizeAmount').textContent =
+            `KES ${parseInt(prize).toLocaleString()}`;
+        document.getElementById('winnerCard').classList.remove('hidden');
+
+        // Scroll to winner card
+        document.getElementById('winnerCard').scrollIntoView({behavior: 'smooth'});
+    }
+</script>
+{% endblock %}
