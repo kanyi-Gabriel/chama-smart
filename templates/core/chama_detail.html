@@ -1,0 +1,251 @@
+{% extends 'core/base_auth.html' %}
+{% block title %}Chama Detail - Chama Smart{% endblock %}
+{% block page_title %}Chama Details{% endblock %}
+
+{% block content %}
+<div id="pendingSection" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
+    <h2 class="text-lg font-semibold text-yellow-800 mb-4">⏳ Pending Member Requests</h2>
+    <div id="pendingMembers"></div>
+</div>
+
+<div id="chamaContent">
+    <p class="text-gray-400 text-center py-12">Loading chama details...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Get chama ID from Django context — assigned to a plain JS variable
+const CHAMA_ID = parseInt("{{ chama_id }}");
+
+async function loadChamaDetail() {
+    const chama = await apiCall('/api/chamas/' + CHAMA_ID + '/');
+    if (!chama) return;
+
+    const members = await apiCall('/api/chamas/my/');
+    const myMembership = members ? members.find(m => m.chama.id === CHAMA_ID) : null;
+    const isAdmin = myMembership && (myMembership.role === 'chairperson' || myMembership.role === 'treasurer');
+
+    const contributions = await apiCall('/api/contributions/chama/' + CHAMA_ID + '/');
+    const loans = await apiCall('/api/loans/chama/' + CHAMA_ID + '/');
+    const analytics = await apiCall('/api/analytics/chama/' + CHAMA_ID + '/');
+
+    // Build header
+    let headerHtml = `
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">${chama.name}</h1>
+                    <p class="text-gray-500 mt-1">${chama.description || 'No description'}</p>
+                    <div class="flex space-x-6 mt-4">
+                        <div>
+                            <p class="text-sm text-gray-400">Contribution</p>
+                            <p class="font-bold text-green-600 text-lg">KES ${parseInt(chama.contribution_amount).toLocaleString()}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Frequency</p>
+                            <p class="font-semibold">${chama.frequency}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Members</p>
+                            <p class="font-semibold">${chama.member_count}/${chama.max_members}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col space-y-2">
+                    ${isAdmin ? '<a href="/draw/?chama=' + CHAMA_ID + '" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center">🎡 Start Draw</a>' : ''}
+                    <button onclick="payContribution()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">💰 Pay Now</button>
+                </div>
+            </div>
+        </div>`;
+
+    // Build analytics row
+    let analyticsHtml = '';
+    if (analytics) {
+        const healthColor = analytics.health_score === 'excellent' ? 'text-green-600' :
+                           analytics.health_score === 'good' ? 'text-blue-600' : 'text-orange-500';
+        analyticsHtml = `
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl p-5 shadow-sm text-center">
+                    <p class="text-gray-400 text-sm">Total Collected</p>
+                    <p class="text-2xl font-bold text-green-600">KES ${analytics.total_collected.toLocaleString()}</p>
+                </div>
+                <div class="bg-white rounded-xl p-5 shadow-sm text-center">
+                    <p class="text-gray-400 text-sm">Total Loaned</p>
+                    <p class="text-2xl font-bold text-orange-500">KES ${analytics.total_loaned.toLocaleString()}</p>
+                </div>
+                <div class="bg-white rounded-xl p-5 shadow-sm text-center">
+                    <p class="text-gray-400 text-sm">Net Savings</p>
+                    <p class="text-2xl font-bold text-blue-600">KES ${analytics.net_savings.toLocaleString()}</p>
+                </div>
+                <div class="bg-white rounded-xl p-5 shadow-sm text-center">
+                    <p class="text-gray-400 text-sm">Health</p>
+                    <p class="text-2xl font-bold ${healthColor}">${analytics.health_score.toUpperCase()}</p>
+                </div>
+            </div>`;
+    }
+
+    // Build credit scores
+    let scoresHtml = '<p class="text-gray-400">No members yet</p>';
+    if (analytics && analytics.member_credit_scores && analytics.member_credit_scores.length > 0) {
+        scoresHtml = analytics.member_credit_scores.map(function(m) {
+            const barColor = m.risk_level === 'low' ? 'bg-green-500' :
+                            m.risk_level === 'medium' ? 'bg-yellow-500' : 'bg-red-500';
+            return '<div class="flex items-center justify-between py-2 border-b border-gray-50">' +
+                '<p class="font-medium">' + m.name + '</p>' +
+                '<div class="flex items-center space-x-3">' +
+                '<div class="w-24 bg-gray-200 rounded-full h-2">' +
+                '<div class="h-2 rounded-full ' + barColor + '" style="width:' + m.credit_score + '%"></div>' +
+                '</div>' +
+                '<span class="text-sm font-semibold">' + m.credit_score + '</span>' +
+                '</div></div>';
+        }).join('');
+    }
+
+    // Build loans section
+    let loansHtml = '<p class="text-gray-400 text-sm">No loan applications yet</p>';
+    if (loans && loans.length > 0) {
+        loansHtml = loans.slice(0, 5).map(function(l) {
+            const statusClass = l.status === 'approved' ? 'bg-green-100 text-green-700' :
+                               l.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                               'bg-red-100 text-red-700';
+            const approveBtn = (isAdmin && l.status === 'pending') ?
+                '<button onclick="reviewLoan(' + l.id + ',\'approve\')" class="text-xs bg-green-600 text-white px-2 py-1 rounded">✓</button>' +
+                '<button onclick="reviewLoan(' + l.id + ',\'reject\')" class="text-xs bg-red-500 text-white px-2 py-1 rounded">✗</button>' : '';
+            return '<div class="flex justify-between items-center py-2 border-b border-gray-50">' +
+                '<div><p class="font-medium text-sm">' + l.applicant.first_name + ' ' + l.applicant.last_name + '</p>' +
+                '<p class="text-xs text-gray-400">KES ' + parseInt(l.amount_requested).toLocaleString() + '</p></div>' +
+                '<div class="flex items-center space-x-2">' +
+                '<span class="text-xs px-2 py-1 rounded-full ' + statusClass + '">' + l.status + '</span>' +
+                approveBtn + '</div></div>';
+        }).join('');
+    }
+
+    // Build contributions table
+    let contribRows = '<tr><td colspan="5" class="py-8 text-center text-gray-400">No contributions yet</td></tr>';
+    if (contributions && contributions.length > 0) {
+        contribRows = contributions.slice(0, 10).map(function(c) {
+            const statusClass = c.status === 'completed' ? 'bg-green-100 text-green-700' :
+                               c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                               'bg-red-100 text-red-700';
+            return '<tr class="border-b border-gray-50">' +
+                '<td class="py-2">' + c.member_name + '</td>' +
+                '<td class="py-2 font-semibold">KES ' + parseInt(c.amount).toLocaleString() + '</td>' +
+                '<td class="py-2 text-gray-400">' + new Date(c.transaction_date).toLocaleDateString() + '</td>' +
+                '<td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs ' + statusClass + '">' + c.status + '</span></td>' +
+                '<td class="py-2 text-gray-400 text-xs">' + (c.mpesa_reference || '--') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    // Assemble full page
+    document.getElementById('chamaContent').innerHTML =
+        headerHtml +
+        analyticsHtml +
+        '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
+
+        // Credit scores card
+        '<div class="bg-white rounded-xl shadow-sm p-6">' +
+        '<h2 class="text-xl font-semibold mb-4">Member Credit Scores</h2>' +
+        scoresHtml +
+        '</div>' +
+
+        // Loans card
+        '<div class="bg-white rounded-xl shadow-sm p-6">' +
+        '<div class="flex justify-between items-center mb-4">' +
+        '<h2 class="text-xl font-semibold">Loan Applications</h2>' +
+        '<a href="/loans/" class="text-green-600 text-sm hover:underline">Apply →</a>' +
+        '</div>' +
+        loansHtml +
+        '</div>' +
+
+        // Contributions table
+        '<div class="bg-white rounded-xl shadow-sm p-6 md:col-span-2">' +
+        '<h2 class="text-xl font-semibold mb-4">Contributions</h2>' +
+        '<table class="w-full text-sm">' +
+        '<thead><tr class="text-left text-gray-400 border-b">' +
+        '<th class="pb-2">Member</th><th class="pb-2">Amount</th>' +
+        '<th class="pb-2">Date</th><th class="pb-2">Status</th><th class="pb-2">Ref</th>' +
+        '</tr></thead>' +
+        '<tbody>' + contribRows + '</tbody>' +
+        '</table></div>' +
+
+        // Pending members (admin only)
+        (isAdmin ? '<div class="bg-white rounded-xl shadow-sm p-6 md:col-span-2" id="pendingCard">' +
+        '<h2 class="text-xl font-semibold mb-4">⏳ Pending Member Requests</h2>' +
+        '<div id="pendingMembers"><p class="text-gray-400">Loading...</p></div>' +
+        '</div>' : '') +
+
+        '</div>';
+
+    // Load pending members if admin
+    if (isAdmin) {
+        loadPendingMembers();
+    }
+}
+
+async function loadPendingMembers() {
+    const pending = await apiCall('/api/chamas/' + CHAMA_ID + '/pending/');
+    const el = document.getElementById('pendingMembers');
+    if (!el) return;
+
+    if (pending && pending.length > 0) {
+        el.innerHTML = pending.map(function(m) {
+            return '<div class="flex justify-between items-center py-3 border-b border-gray-50">' +
+                '<div>' +
+                '<p class="font-medium">' + m.user.first_name + ' ' + m.user.last_name + '</p>' +
+                '<p class="text-sm text-gray-400">' + m.user.phone_number + '</p>' +
+                '</div>' +
+                '<div class="flex space-x-2">' +
+                '<button onclick="reviewMember(' + m.id + ',\'approve\')" ' +
+                'class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">Approve</button>' +
+                '<button onclick="reviewMember(' + m.id + ',\'reject\')" ' +
+                'class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Reject</button>' +
+                '</div></div>';
+        }).join('');
+    } else {
+        el.innerHTML = '<p class="text-gray-400 text-sm">No pending requests</p>';
+    }
+}
+
+async function reviewMember(membershipId, action) {
+    if (!confirm(action + ' this member?')) return;
+    const result = await apiCall('/api/chamas/membership/' + membershipId + '/review/', 'POST', {action: action});
+    if (result && result.message) {
+        alert(result.message);
+        loadPendingMembers();
+        loadChamaDetail();
+    } else {
+        alert(result ? JSON.stringify(result) : 'Error processing request');
+    }
+}
+
+async function reviewLoan(loanId, action) {
+    if (!confirm(action + ' this loan?')) return;
+    const data = {action: action};
+    if (action === 'approve') {
+        const amount = prompt('Approved amount (KES):');
+        if (!amount) return;
+        data.amount_approved = amount;
+    }
+    const result = await apiCall('/api/loans/' + loanId + '/review/', 'POST', data);
+    if (result && result.loan) {
+        alert('Loan ' + action + 'd successfully');
+        loadChamaDetail();
+    } else {
+        alert(result ? JSON.stringify(result) : 'Error');
+    }
+}
+
+async function payContribution() {
+    if (!confirm('Send M-Pesa payment prompt to your phone?')) return;
+    const result = await apiCall('/api/contributions/chama/' + CHAMA_ID + '/pay/', 'POST');
+    if (result) {
+        alert(result.message || result.error || 'Unknown response');
+    }
+}
+
+// Load everything
+loadChamaDetail();
+</script>
+{% endblock %}

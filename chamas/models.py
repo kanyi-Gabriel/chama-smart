@@ -26,15 +26,23 @@ class Chama(models.Model):
 class Membership(models.Model):
 
     ROLE_CHOICES = [
-        ('admin', 'Admin'),
+        ('chairperson', 'Chairperson'),
         ('treasurer', 'Treasurer'),
         ('secretary', 'Secretary'),
         ('member', 'Member'),
     ]
 
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('active', 'Active'),
+        ('rejected', 'Rejected'),
+        ('suspended', 'Suspended'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='memberships')
     chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name='memberships')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='member')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     date_joined = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     credit_score = models.FloatField(default=50.0)
@@ -43,4 +51,37 @@ class Membership(models.Model):
         unique_together = ('user', 'chama')
 
     def __str__(self):
-        return f"{self.user} - {self.chama} ({self.role})"
+        return f"{self.user} - {self.chama} ({self.role}) [{self.status}]"
+
+class DrawSession(models.Model):
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+    ]
+
+    chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name='draw_sessions')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    started_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='started_draws')
+    winner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='won_draws')
+    prize_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    payout_reference = models.CharField(max_length=50, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.chama.name} Draw - {self.status}"
+
+
+class DrawParticipant(models.Model):
+    session = models.ForeignKey(DrawSession, on_delete=models.CASCADE, related_name='participants')
+    member = models.ForeignKey(User, on_delete=models.CASCADE)
+    has_won_before = models.BooleanField(default=False)
+    position = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = ('session', 'member')
+
+    def __str__(self):
+        return f"{self.member} in {self.session}"

@@ -1,0 +1,89 @@
+{% extends 'core/base_auth.html' %}
+{% block title %}Contributions - Chama Smart{% endblock %}
+{% block page_title %}My Contributions{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-2">Pay a Contribution</h2>
+    <p class="text-gray-500 text-sm mb-6">Select your chama and click pay — an M-Pesa prompt will be sent to your phone</p>
+    <div class="flex space-x-4">
+        <select id="payChama" class="flex-1 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">Select chama...</option>
+        </select>
+        <button onclick="payContribution()"
+            class="bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition">
+            💰 Pay via M-Pesa
+        </button>
+    </div>
+    <div id="payMsg" class="hidden mt-4 p-4 rounded-lg"></div>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm p-6">
+    <h2 class="text-xl font-semibold mb-6">Contribution History</h2>
+    <div id="contributionList"><p class="text-gray-400 text-center py-8">Loading...</p></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadContributions() {
+    const chamas = await apiCall('/api/chamas/my/');
+    const select = document.getElementById('payChama');
+    if (chamas && chamas.length > 0) {
+        select.innerHTML = '<option value="">Select chama...</option>' +
+            chamas.map(m => `<option value="${m.chama.id}">${m.chama.name} (KES ${parseInt(m.chama.contribution_amount).toLocaleString()})</option>`).join('');
+    }
+
+    const contributions = await apiCall('/api/contributions/my/');
+    const listEl = document.getElementById('contributionList');
+    if (contributions && contributions.length > 0) {
+        listEl.innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead><tr class="text-left text-gray-400 border-b">
+                <th class="pb-3">Chama</th><th class="pb-3">Amount</th>
+                <th class="pb-3">Date</th><th class="pb-3">Status</th>
+                <th class="pb-3">On Time?</th><th class="pb-3">M-Pesa Ref</th>
+            </tr></thead>
+            <tbody>${contributions.map(c => `
+                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                    <td class="py-3 font-medium">${c.chama_name}</td>
+                    <td class="py-3 font-semibold text-green-600">KES ${parseInt(c.amount).toLocaleString()}</td>
+                    <td class="py-3 text-gray-400">${new Date(c.transaction_date).toLocaleDateString()}</td>
+                    <td class="py-3"><span class="px-2 py-1 rounded-full text-xs ${
+                        c.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'}">${c.status}</span></td>
+                    <td class="py-3">${c.is_late ? '<span class="text-red-500 text-xs">Late</span>' : '<span class="text-green-500 text-xs">On time</span>'}</td>
+                    <td class="py-3 text-gray-400 text-xs">${c.mpesa_reference || '--'}</td>
+                </tr>`).join('')}
+            </tbody></table></div>`;
+    } else {
+        listEl.innerHTML = '<p class="text-gray-400 text-center py-8">No contributions yet. Make your first payment above!</p>';
+    }
+}
+
+async function payContribution() {
+    const chamaId = document.getElementById('payChama').value;
+    const msgEl = document.getElementById('payMsg');
+    if (!chamaId) {
+        msgEl.className = 'mt-4 p-4 rounded-lg bg-red-50 text-red-700';
+        msgEl.textContent = 'Please select a chama first';
+        msgEl.classList.remove('hidden');
+        return;
+    }
+    if (!confirm('An M-Pesa payment prompt will be sent to your phone. Continue?')) return;
+    const result = await apiCall(`/api/contributions/chama/${chamaId}/pay/`, 'POST');
+    if (result && result.message) {
+        msgEl.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-700';
+        msgEl.textContent = result.message;
+        msgEl.classList.remove('hidden');
+        setTimeout(loadContributions, 3000);
+    } else {
+        msgEl.className = 'mt-4 p-4 rounded-lg bg-red-50 text-red-700';
+        msgEl.textContent = result?.error || 'Failed to initiate payment';
+        msgEl.classList.remove('hidden');
+    }
+}
+
+loadContributions();
+</script>
+{% endblock %}

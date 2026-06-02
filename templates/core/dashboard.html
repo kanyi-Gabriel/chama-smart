@@ -1,0 +1,169 @@
+{% extends 'core/base_auth.html' %}
+{% block title %}Dashboard - Chama Smart{% endblock %}
+{% block page_title %}My Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+        <p class="text-gray-500 text-sm">My Chamas</p>
+        <p class="text-3xl font-bold text-green-600 mt-1" id="chamaCount">--</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+        <p class="text-gray-500 text-sm">Credit Score</p>
+        <p class="text-3xl font-bold text-blue-600 mt-1" id="creditScore">--</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+        <p class="text-gray-500 text-sm">Active Loans</p>
+        <p class="text-3xl font-bold text-orange-500 mt-1" id="activeLoans">--</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+        <p class="text-gray-500 text-sm">Risk Level</p>
+        <p class="text-3xl font-bold mt-1" id="riskLevel">--</p>
+    </div>
+</div>
+
+<!-- My Chamas -->
+<div class="bg-white rounded-xl shadow-sm p-6 mb-8">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-semibold">My Chamas</h2>
+        <a href="/chamas/" class="text-green-600 hover:underline text-sm font-medium">
+            Browse All Chamas →
+        </a>
+    </div>
+    <div id="chamasList" class="space-y-4">
+        <p class="text-gray-400 text-center py-8">Loading your chamas...</p>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-xl font-semibold mb-4">Recent Contributions</h2>
+        <div id="recentContributions">
+            <p class="text-gray-400 text-center py-4">Loading...</p>
+        </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-xl font-semibold mb-4">My Loans</h2>
+        <div id="recentLoans">
+            <p class="text-gray-400 text-center py-4">Loading...</p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/login/'; return; }
+
+    // Load credit score
+    const score = await apiCall('/api/analytics/score/');
+    if (score) {
+        document.getElementById('creditScore').textContent = score.credit_score;
+        const riskEl = document.getElementById('riskLevel');
+        riskEl.textContent = score.risk_level.toUpperCase();
+        riskEl.className = `text-2xl font-bold mt-1 ${
+            score.risk_level === 'low' ? 'text-green-600' :
+            score.risk_level === 'medium' ? 'text-yellow-500' : 'text-red-500'
+        }`;
+    }
+
+    // Load my chamas
+    const chamas = await apiCall('/api/chamas/my/');
+    if (chamas) {
+        document.getElementById('chamaCount').textContent = chamas.length;
+        const list = document.getElementById('chamasList');
+        if (chamas.length === 0) {
+            list.innerHTML = `
+                <div class="text-center py-8">
+                    <p class="text-gray-400 mb-4">You haven't joined any chamas yet</p>
+                    <a href="/chamas/" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">
+                        Browse Chamas
+                    </a>
+                </div>`;
+        } else {
+            list.innerHTML = chamas.map(m => `
+                <div class="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+                    <div>
+                        <p class="font-semibold">${m.chama.name}</p>
+                        <p class="text-sm text-gray-500">
+                            Role: ${m.role} · ${m.chama.member_count} members ·
+                            KES ${parseInt(m.chama.contribution_amount).toLocaleString()} ${m.chama.frequency}
+                        </p>
+                    </div>
+                    <a href="/chamas/${m.chama.id}/"
+                        class="bg-green-50 text-green-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-100 transition">
+                        View →
+                    </a>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Load contributions
+    const contributions = await apiCall('/api/contributions/my/');
+    if (contributions) {
+        const el = document.getElementById('recentContributions');
+        if (contributions.length === 0) {
+            el.innerHTML = '<p class="text-gray-400 text-center py-4">No contributions yet</p>';
+        } else {
+            el.innerHTML = contributions.slice(0, 5).map(c => `
+                <div class="flex justify-between items-center py-3 border-b border-gray-50">
+                    <div>
+                        <p class="font-medium text-sm">${c.chama_name}</p>
+                        <p class="text-xs text-gray-400">${new Date(c.transaction_date).toLocaleDateString()}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-semibold">KES ${parseInt(c.amount).toLocaleString()}</p>
+                        <span class="text-xs px-2 py-1 rounded-full ${
+                            c.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                        }">${c.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Load loans
+    const loans = await apiCall('/api/loans/my/');
+    if (loans) {
+        let activeCount = loans.filter(l =>
+            ['pending','approved','disbursed'].includes(l.status)
+        ).length;
+        document.getElementById('activeLoans').textContent = activeCount;
+
+        const el = document.getElementById('recentLoans');
+        if (loans.length === 0) {
+            el.innerHTML = '<p class="text-gray-400 text-center py-4">No loan applications yet</p>';
+        } else {
+            el.innerHTML = loans.slice(0, 5).map(l => `
+                <div class="flex justify-between items-center py-3 border-b border-gray-50">
+                    <div>
+                        <p class="font-medium text-sm">${l.chama_name}</p>
+                        <p class="text-xs text-gray-400">${l.purpose.substring(0, 30)}...</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-semibold">KES ${parseInt(l.amount_requested).toLocaleString()}</p>
+                        <span class="text-xs px-2 py-1 rounded-full ${
+                            l.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            l.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            l.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                        }">${l.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+loadDashboard();
+</script>
+{% endblock %}
