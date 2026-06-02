@@ -7,44 +7,34 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#16a34a',
-                        dark: '#14532d',
-                    }
-                }
-            }
+            theme: { extend: { colors: { primary: '#16a34a', dark: '#14532d' } } }
         }
     </script>
 </head>
 <body class="bg-gray-50 text-gray-800">
-    <!-- Navbar -->
-    <nav class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-2">
-                <span class="text-2xl">🌱</span>
-                <span class="text-xl font-bold text-primary">Chama Smart</span>
-            </div>
-            <div class="space-x-4">
-                <a href="/admin/" class="text-gray-600 hover:text-primary transition">Admin</a>
-                <a href="#" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-dark transition">
-                <a href="/draw/" class="text-gray-600 hover:text-primary transition">Live Draw</a>
-                    Get Started
-                </a>
-            </div>
+
+<nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+        <a href="/" class="flex items-center space-x-2">
+            <span class="text-2xl">🌱</span>
+            <span class="text-xl font-bold text-primary">Chama Smart</span>
+        </a>
+        <div class="space-x-4">
+            <a href="/login/" class="text-gray-600 hover:text-primary transition">Login</a>
+            <a href="/register/" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-dark transition">Get Started</a>
         </div>
-    </nav>
+    </div>
+</nav>
 
-    <!-- Main Content -->
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+<main>
+    {% block content %}{% endblock %}
+</main>
 
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-gray-400 text-center py-8 mt-16">
-        <p class="text-lg font-semibold text-white mb-1">🌱 Chama Smart</p>
-        <p class="text-sm">Built with Django & Daraja API · Made in Kenya 🇰🇪</p>
-    </footer>
+<footer class="bg-gray-800 text-gray-400 text-center py-8 mt-16">
+    <p class="text-lg font-semibold text-white mb-1">🌱 Chama Smart</p>
+    <p class="text-sm">Built with Django & Daraja API · Made in Kenya 🇰🇪</p>
+</footer>
+
+{% block scripts %}{% endblock %}
 </body>
 </html>

@@ -92,10 +92,6 @@ class ChamaLoansView(generics.ListAPIView):
 
 
 class ReviewLoanView(APIView):
-    """
-    Admin approves or rejects a loan application.
-    ML recommendation is shown but human makes final call.
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, loan_id):
@@ -104,36 +100,44 @@ class ReviewLoanView(APIView):
         except LoanApplication.DoesNotExist:
             return Response({'error': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Verify reviewer is admin of this chama
         try:
             membership = Membership.objects.get(
                 user=request.user,
                 chama=loan.chama,
-                role__in=['admin', 'treasurer'],
-                is_active=True
+                is_active=True,
+                status='active'
             )
         except Membership.DoesNotExist:
-            return Response(
-                {'error': 'Only chama admins and treasurers can review loans'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': 'You are not a member of this chama'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Role-based approval limits
+        role = membership.role
+        action = request.data.get('action')
+
+        if role == 'member':
+            return Response({'error': 'Members cannot approve loans'}, status=status.HTTP_403_FORBIDDEN)
+
+        if role == 'secretary':
+            return Response({'error': 'Secretary can view but not approve loans. Only chairperson or treasurer can approve.'}, status=status.HTTP_403_FORBIDDEN)
 
         if loan.status != 'pending':
-            return Response(
-                {'error': f'This loan has already been {loan.status}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': f'This loan has already been {loan.status}'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = LoanApprovalSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        action = serializer.validated_data['action']
-
         if action == 'approve':
-            amount_approved = serializer.validated_data.get(
-                'amount_approved', loan.amount_requested
-            )
+            # Treasurer can only approve up to 3x monthly contribution
+            if role == 'treasurer':
+                limit = loan.chama.contribution_amount * 3
+                amount_requested = loan.amount_requested
+                if amount_requested > limit:
+                    return Response({
+                        'error': f'Treasurer can only approve loans up to KES {limit}. This loan requires Chairperson approval.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            amount_approved = serializer.validated_data.get('amount_approved', loan.amount_requested)
             loan.status = 'approved'
             loan.amount_approved = amount_approved
             loan.reviewed_by = request.user
@@ -141,7 +145,7 @@ class ReviewLoanView(APIView):
             loan.save()
 
             return Response({
-                'message': f'Loan approved for KES {amount_approved}',
+                'message': f'Loan approved for KES {amount_approved} by {role}',
                 'loan': LoanApplicationSerializer(loan).data
             })
 
@@ -150,9 +154,8 @@ class ReviewLoanView(APIView):
             loan.reviewed_by = request.user
             loan.reviewed_at = timezone.now()
             loan.save()
-
             return Response({
-                'message': 'Loan application rejected',
+                'message': 'Loan rejected',
                 'loan': LoanApplicationSerializer(loan).data
             })
 

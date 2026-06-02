@@ -11,8 +11,8 @@ class ChamaAdmin(admin.ModelAdmin):
 
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin):
-    list_display = ['user', 'chama', 'role', 'credit_score', 'date_joined', 'is_active']
-    list_filter = ['role', 'is_active']
+    list_display = ['user', 'chama', 'role', 'status', 'credit_score', 'date_joined', 'is_active']
+    list_filter = ['role', 'status', 'is_active']
     search_fields = ['user__phone_number', 'chama__name']
 
 

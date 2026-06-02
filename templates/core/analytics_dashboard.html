@@ -1,0 +1,128 @@
+{% extends 'core/base_auth.html' %}
+{% block title %}Analytics - Chama Smart{% endblock %}
+{% block page_title %}My Analytics{% endblock %}
+
+{% block content %}
+<div class="bg-gradient-to-br from-green-700 to-green-500 rounded-2xl p-8 mb-8 text-white">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-bold mb-1">My Credit Score</h2>
+            <p class="text-green-200">Based on your contribution and loan history</p>
+        </div>
+        <div class="text-right">
+            <div class="text-7xl font-bold" id="bigScore">--</div>
+            <div class="text-green-200 text-lg" id="scoreLabel">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-xl font-semibold mb-6">Score Breakdown</h2>
+        <div id="scoreBreakdown"><p class="text-gray-400">Loading...</p></div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-xl font-semibold mb-6">How to Improve</h2>
+        <div id="improveTips"><p class="text-gray-400">Loading...</p></div>
+    </div>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-semibold">Chama Analytics</h2>
+        <select id="chamaSelect" onchange="loadChamaAnalytics()"
+            class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">Select a chama...</option>
+        </select>
+    </div>
+    <div id="chamaAnalytics"><p class="text-gray-400 text-center py-8">Select a chama to see group analytics</p></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadAnalytics() {
+    const score = await apiCall('/api/analytics/score/');
+    if (score) {
+        document.getElementById('bigScore').textContent = score.credit_score;
+        document.getElementById('scoreLabel').textContent = `${score.recommendation.toUpperCase()} · ${score.risk_level.toUpperCase()} RISK`;
+        const b = score.score_breakdown;
+        document.getElementById('scoreBreakdown').innerHTML = `
+            ${[['On-Time Payment Rate', b.on_time_payment_rate],
+               ['Contribution Completion', b.contribution_completion_rate],
+               ['Loan Repayment Rate', b.loan_repayment_rate]].map(([label, value]) => {
+                const pct = parseFloat(value);
+                return `<div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">${label}</span>
+                        <span class="font-semibold">${value}</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}"
+                            style="width: ${pct}%"></div>
+                    </div>
+                </div>`;}).join('')}
+            <div class="flex justify-between text-sm pt-2 border-t">
+                <span class="text-gray-600">Months Active</span>
+                <span class="font-semibold">${b.months_active} months</span>
+            </div>`;
+        document.getElementById('improveTips').innerHTML = score.how_to_improve.map(tip => `
+            <div class="flex items-start space-x-3 p-3 bg-green-50 rounded-lg mb-2">
+                <span class="text-green-600 font-bold">→</span>
+                <p class="text-sm text-gray-700">${tip}</p>
+            </div>`).join('');
+    }
+
+    const chamas = await apiCall('/api/chamas/my/');
+    const select = document.getElementById('chamaSelect');
+    if (chamas && chamas.length > 0) {
+        select.innerHTML = '<option value="">Select a chama...</option>' +
+            chamas.map(m => `<option value="${m.chama.id}">${m.chama.name}</option>`).join('');
+    }
+}
+
+async function loadChamaAnalytics() {
+    const chamaId = document.getElementById('chamaSelect').value;
+    if (!chamaId) return;
+    const a = await apiCall(`/api/analytics/chama/${chamaId}/`);
+    if (!a) return;
+    document.getElementById('chamaAnalytics').innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-green-50 rounded-xl p-4 text-center">
+                <p class="text-gray-500 text-sm">Total Collected</p>
+                <p class="text-2xl font-bold text-green-600">KES ${a.total_collected.toLocaleString()}</p>
+            </div>
+            <div class="bg-orange-50 rounded-xl p-4 text-center">
+                <p class="text-gray-500 text-sm">Total Loaned</p>
+                <p class="text-2xl font-bold text-orange-500">KES ${a.total_loaned.toLocaleString()}</p>
+            </div>
+            <div class="bg-blue-50 rounded-xl p-4 text-center">
+                <p class="text-gray-500 text-sm">Net Savings</p>
+                <p class="text-2xl font-bold text-blue-600">KES ${a.net_savings.toLocaleString()}</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-4 text-center">
+                <p class="text-gray-500 text-sm">Health</p>
+                <p class="text-2xl font-bold ${a.health_score === 'excellent' ? 'text-green-600' : a.health_score === 'good' ? 'text-blue-600' : 'text-orange-500'}">
+                    ${a.health_score.toUpperCase()}</p>
+            </div>
+        </div>
+        <h3 class="font-semibold text-lg mb-4">Member Credit Scores</h3>
+        <div class="space-y-3">
+            ${a.member_credit_scores.map(m => `
+                <div class="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+                    <p class="font-medium">${m.name}</p>
+                    <div class="flex items-center space-x-4">
+                        <div class="w-32 bg-gray-200 rounded-full h-2">
+                            <div class="h-2 rounded-full ${m.risk_level === 'low' ? 'bg-green-500' : m.risk_level === 'medium' ? 'bg-yellow-500' : 'bg-red-500'}"
+                                style="width: ${m.credit_score}%"></div>
+                        </div>
+                        <span class="font-bold w-8 text-right">${m.credit_score}</span>
+                        <span class="text-xs px-2 py-1 rounded-full ${m.risk_level === 'low' ? 'bg-green-100 text-green-700' : m.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">${m.risk_level}</span>
+                    </div>
+                </div>`).join('')}
+        </div>`;
+}
+
+loadAnalytics();
+</script>
+{% endblock %}

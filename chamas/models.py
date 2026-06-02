@@ -26,15 +26,23 @@ class Chama(models.Model):
 class Membership(models.Model):
 
     ROLE_CHOICES = [
-        ('admin', 'Admin'),
+        ('chairperson', 'Chairperson'),
         ('treasurer', 'Treasurer'),
         ('secretary', 'Secretary'),
         ('member', 'Member'),
     ]
 
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('active', 'Active'),
+        ('rejected', 'Rejected'),
+        ('suspended', 'Suspended'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='memberships')
     chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name='memberships')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='member')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     date_joined = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     credit_score = models.FloatField(default=50.0)
@@ -43,8 +51,7 @@ class Membership(models.Model):
         unique_together = ('user', 'chama')
 
     def __str__(self):
-        return f"{self.user} - {self.chama} ({self.role})"
-    
+        return f"{self.user} - {self.chama} ({self.role}) [{self.status}]"
 
 class DrawSession(models.Model):
 

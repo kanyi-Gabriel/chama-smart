@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Chama Smart{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#16a34a', dark: '#14532d' } } }
+        }
+    </script>
+    <style>
+        .card-hover { transition: all 0.2s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<div class="flex h-screen overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-green-800 text-white flex flex-col fixed h-full z-40">
+        <div class="p-6 border-b border-green-700">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">🌱</span>
+                <span class="text-xl font-bold">Chama Smart</span>
+            </div>
+            <p class="text-green-300 text-sm mt-1" id="sidebarName">Loading...</p>
+            <p class="text-green-400 text-xs" id="sidebarPhone"></p>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-1">
+            <a href="/dashboard/" class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'dashboard' %}bg-green-700{% endif %}">
+                <span>🏠</span><span>Dashboard</span>
+            </a>
+            <a href="/chamas/" class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'chamas' %}bg-green-700{% endif %}">
+                <span>👥</span><span>My Chamas</span>
+            </a>
+            <a href="/contributions/" class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'contributions' %}bg-green-700{% endif %}">
+                <span>💰</span><span>Contributions</span>
+            </a>
+            <a href="/loans/" class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'loans' %}bg-green-700{% endif %}">
+                <span>🏦</span><span>Loans</span>
+            </a>
+            <a href="/analytics/" class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'analytics' %}bg-green-700{% endif %}">
+                <span>📊</span><span>Analytics</span>
+            </a>
+            <a id="drawLink" href="/draw/" class="hidden flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-green-700 transition {% if active_page == 'draw' %}bg-green-700{% endif %}">
+                <span>🎡</span><span>Live Draw</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-green-700">
+            <button onclick="logout()"
+                class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-red-700 transition text-red-300 hover:text-white">
+                <span>🚪</span><span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="ml-64 flex-1 overflow-y-auto">
+        <header class="bg-white shadow-sm px-8 py-4 flex justify-between items-center sticky top-0 z-30">
+            <h1 class="text-xl font-semibold text-gray-700">
+                {% block page_title %}Dashboard{% endblock %}
+            </h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500" id="headerGreeting"></span>
+                <div class="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center text-white font-bold" id="headerAvatar">?</div>
+            </div>
+        </header>
+
+        <main class="p-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+
+<script>
+    function getToken() { return localStorage.getItem('access_token'); }
+    function clearTokens() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+    }
+    async function logout() {
+        const refresh = localStorage.getItem('refresh_token');
+        if (refresh) {
+            await fetch('/api/accounts/logout/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getToken()}`
+                },
+                body: JSON.stringify({refresh})
+            });
+        }
+        clearTokens();
+        window.location.href = '/login/';
+    }
+    async function apiCall(url, method='GET', data=null) {
+        const token = getToken();
+        if (!token) { window.location.href = '/login/'; return null; }
+        const headers = {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`};
+        const options = {method, headers};
+        if (data) options.body = JSON.stringify(data);
+        const response = await fetch(url, options);
+        if (response.status === 401) {
+            clearTokens();
+            window.location.href = '/login/';
+            return null;
+        }
+        return response.json();
+    }
+
+    // Load user info into sidebar
+    async function loadUserInfo() {
+        const token = getToken();
+        if (!token) { window.location.href = '/login/'; return; }
+        const user = await apiCall('/api/accounts/profile/');
+        if (user) {
+            const name = (user.first_name + ' ' + user.last_name).trim() || user.phone_number;
+            document.getElementById('sidebarName').textContent = name;
+            document.getElementById('sidebarPhone').textContent = user.phone_number;
+            document.getElementById('headerGreeting').textContent = 'Welcome, ' + (user.first_name || 'back');
+            document.getElementById('headerAvatar').textContent = (user.first_name || user.phone_number)[0].toUpperCase();
+
+            // Check if user is admin in any chama — show Live Draw link if so
+            const chamas = await apiCall('/api/chamas/my/');
+            if (chamas && chamas.some(m => m.role === 'chairperson' || m.role === 'treasurer')) {
+                document.getElementById('drawLink').classList.remove('hidden');
+            }
+        }
+    }
+    loadUserInfo();
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

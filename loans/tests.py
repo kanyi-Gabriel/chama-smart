@@ -28,7 +28,8 @@ class LoanTestCase(APITestCase):
         Membership.objects.create(
             user=self.admin,
             chama=self.chama,
-            role='admin'
+            role='chairperson',
+            status='active'
         )
         Membership.objects.create(
             user=self.member,

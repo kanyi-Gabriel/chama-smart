@@ -79,7 +79,8 @@
             authToken = data.access;
 
             // Start the draw
-            const drawRes = await fetch('/api/chamas/1/draw/start/', {
+            const chamaId = new URLSearchParams(window.location.search).get('chama') || 1;
+            const drawRes = await fetch(`/api/chamas/${chamaId}/draw/start/`, {
                 method: 'POST',
                 headers: {'Authorization': `Bearer ${authToken}`}
             });

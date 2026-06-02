@@ -20,11 +20,12 @@ class StartDrawView(APIView):
         # Verify admin
         try:
             membership = Membership.objects.get(
-                user=request.user,
-                chama_id=chama_id,
-                role__in=['admin', 'treasurer'],
-                is_active=True
-            )
+            user=request.user,
+            chama_id=chama_id,
+            role__in=['chairperson', 'treasurer'],
+            is_active=True,
+            status='active'
+        )
         except Membership.DoesNotExist:
             return Response(
                 {'error': 'Only admins can start a draw'},

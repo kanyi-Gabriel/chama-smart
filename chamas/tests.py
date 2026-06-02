@@ -36,7 +36,7 @@ class ChamaTestCase(APITestCase):
             Membership.objects.filter(
                 user=self.admin,
                 chama__name='Test Chama',
-                role='admin'
+                role='chairperson'
             ).exists()
         )
 
