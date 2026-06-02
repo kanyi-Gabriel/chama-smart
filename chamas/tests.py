@@ -93,7 +93,8 @@ class ChamaTestCase(APITestCase):
         Membership.objects.create(
             user=self.member,
             chama=chama,
-            role='member'
+            role='member',
+            status='active'
         )
         self.client.force_authenticate(user=self.member)
         response = self.client.get('/api/chamas/my/')
