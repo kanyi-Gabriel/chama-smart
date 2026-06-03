@@ -128,7 +128,7 @@
 
             // Check if user is admin in any chama — show Live Draw link if so
             const chamas = await apiCall('/api/chamas/my/');
-            if (chamas && chamas.some(m => m.role === 'chairperson' || m.role === 'treasurer')) {
+            if (chamas && chamas.some(m => m.role === 'admin' || m.role === 'treasurer')) {
                 document.getElementById('drawLink').classList.remove('hidden');
             }
         }
