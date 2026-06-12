@@ -53,8 +53,9 @@ async function loadChamaDetail() {
                     </div>
                 </div>
                 <div class="flex flex-col space-y-2">
-                    ${isAdmin ? '<a href="/draw/?chama=' + CHAMA_ID + '" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center">🎡 Start Draw</a>' : ''}
-                    <button onclick="payContribution()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">💰 Pay Now</button>
+                     ${isAdmin ? '<a href="/draw/?chama=' + CHAMA_ID + '" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center">🎡 Start Draw</a>' : ''}
+                        ${'<a href="/chamas/' + CHAMA_ID + '/chat/" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-center">💬 Group Chat</a>'}
+                     <button onclick="payContribution()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">💰 Pay Now</button>
                 </div>
             </div>
         </div>`;

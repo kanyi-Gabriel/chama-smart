@@ -10,4 +10,5 @@ urlpatterns = [
     path('api/loans/', include('loans.urls')),
     path('api/analytics/', include('analytics.urls')),
     path('', include('core_pages.urls')),
+    path('api/chat/', include('chat.urls')),
 ]

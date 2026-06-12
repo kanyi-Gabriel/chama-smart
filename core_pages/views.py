@@ -58,3 +58,10 @@ def analytics_view(request):
 
 def draw(request):
     return render(request, 'core/draw.html')
+
+def chat_view(request, chama_id):
+    return render(request, 'core/chat.html', {
+        'user_data': True,
+        'active_page': 'chamas',
+        'chama_id': chama_id
+    })

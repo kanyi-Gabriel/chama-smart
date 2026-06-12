@@ -1,0 +1,199 @@
+{% extends 'core/base_auth.html' %}
+{% block title %}Chama Chat - Chama Smart{% endblock %}
+{% block page_title %}Chama Chat{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full" style="height: calc(100vh - 140px)">
+
+    <!-- Pinned Messages -->
+    <div id="pinnedSection" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
+        <p class="text-xs text-yellow-700 font-semibold mb-2">📌 PINNED</p>
+        <div id="pinnedMessages"></div>
+    </div>
+
+    <!-- Chat Window -->
+    <div class="bg-white rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+
+        <!-- Chat Header -->
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+            <div>
+                <h2 class="font-semibold text-lg" id="chamaName">Loading...</h2>
+                <p class="text-xs text-gray-400" id="memberCount"></p>
+            </div>
+            <span class="w-2 h-2 bg-green-500 rounded-full" title="Connected"></span>
+        </div>
+
+        <!-- Messages Area -->
+        <div id="messagesArea" class="flex-1 overflow-y-auto p-4 space-y-3">
+            <p class="text-gray-400 text-center text-sm">Connecting...</p>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-gray-100">
+            <div id="announcementToggle" class="hidden mb-2">
+                <label class="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+                    <input type="checkbox" id="isAnnouncement" class="rounded">
+                    <span>📢 Send as announcement</span>
+                </label>
+            </div>
+            <div class="flex space-x-3">
+                <input id="messageInput" type="text"
+                    placeholder="Type a message..."
+                    class="flex-1 border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()"
+                    class="bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition font-medium">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CHAMA_ID = parseInt("{{ chama_id }}");
+let socket = null;
+let currentUserPhone = null;
+let isAdmin = false;
+
+async function initChat() {
+    // Get current user
+    const user = await apiCall('/api/accounts/profile/');
+    if (!user) return;
+    currentUserPhone = user.phone_number;
+
+    // Get chama info
+    const chama = await apiCall('/api/chamas/' + CHAMA_ID + '/');
+    if (chama) {
+        document.getElementById('chamaName').textContent = chama.name + ' — Chat';
+        document.getElementById('memberCount').textContent = chama.member_count + ' members';
+    }
+
+    // Check if admin
+    const memberships = await apiCall('/api/chamas/my/');
+    const myMembership = memberships ? memberships.find(m => m.chama.id === CHAMA_ID) : null;
+    isAdmin = myMembership && (myMembership.role === 'chairperson' || myMembership.role === 'treasurer');
+    if (isAdmin) {
+        document.getElementById('announcementToggle').classList.remove('hidden');
+    }
+
+    // Connect WebSocket
+    connectWebSocket();
+}
+
+function connectWebSocket() {
+    const token = localStorage.getItem('access_token');
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = wsProtocol + '//' + window.location.host + '/ws/chat/' + CHAMA_ID + '/?token=' + token;
+
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = function() {
+        console.log('WebSocket connected');
+        document.getElementById('messagesArea').innerHTML =
+            '<p class="text-gray-400 text-center text-sm py-4">Connected! Send a message to start chatting.</p>';
+    };
+
+    socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'history') {
+            renderHistory(data.messages);
+        } else if (data.type === 'message') {
+            appendMessage(data.message);
+        }
+    };
+
+    socket.onclose = function() {
+        document.getElementById('messagesArea').innerHTML +=
+            '<p class="text-gray-400 text-center text-sm py-2">Disconnected. Reconnecting...</p>';
+        setTimeout(connectWebSocket, 3000);
+    };
+
+    socket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+}
+
+function renderHistory(messages) {
+    const area = document.getElementById('messagesArea');
+    if (messages.length === 0) {
+        area.innerHTML = '<p class="text-gray-400 text-center text-sm py-8">No messages yet. Say hello! 👋</p>';
+        return;
+    }
+    area.innerHTML = '';
+    messages.forEach(m => appendMessage(m, false));
+    area.scrollTop = area.scrollHeight;
+}
+
+function appendMessage(msg, scroll=true) {
+    const area = document.getElementById('messagesArea');
+    const isMe = msg.sender_phone === currentUserPhone || msg.sender === currentUserPhone;
+    const isAnnouncement = msg.message_type === 'announcement';
+    const isSystem = msg.message_type === 'system';
+
+    let html = '';
+
+    if (isSystem) {
+        html = '<div class="text-center">' +
+            '<span class="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">' + msg.content + '</span>' +
+            '</div>';
+    } else if (isAnnouncement) {
+        html = '<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">' +
+            '<div class="flex items-center space-x-2 mb-2">' +
+            '<span class="text-yellow-600">📢</span>' +
+            '<span class="text-sm font-semibold text-yellow-800">' + msg.sender + '</span>' +
+            '<span class="text-xs text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-full">Announcement</span>' +
+            '</div>' +
+            '<p class="text-gray-700">' + msg.content + '</p>' +
+            '<p class="text-xs text-gray-400 mt-1">' + msg.timestamp + '</p>' +
+            '</div>';
+    } else if (isMe) {
+        html = '<div class="flex justify-end">' +
+            '<div class="max-w-xs lg:max-w-md">' +
+            '<div class="bg-green-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm">' +
+            '<p>' + msg.content + '</p>' +
+            '</div>' +
+            '<p class="text-xs text-gray-400 text-right mt-1">' + msg.timestamp + '</p>' +
+            '</div></div>';
+    } else {
+        html = '<div class="flex justify-start">' +
+            '<div class="max-w-xs lg:max-w-md">' +
+            '<p class="text-xs text-gray-500 mb-1 ml-1">' + msg.sender + '</p>' +
+            '<div class="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-tl-sm">' +
+            '<p>' + msg.content + '</p>' +
+            '</div>' +
+            '<p class="text-xs text-gray-400 mt-1 ml-1">' + msg.timestamp + '</p>' +
+            '</div></div>';
+    }
+
+    area.innerHTML += html;
+    if (scroll) area.scrollTop = area.scrollHeight;
+}
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const content = input.value.trim();
+    if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+    const isAnnouncement = document.getElementById('isAnnouncement')?.checked || false;
+
+    socket.send(JSON.stringify({
+        message: content,
+        is_announcement: isAnnouncement
+    }));
+
+    input.value = '';
+    if (document.getElementById('isAnnouncement')) {
+        document.getElementById('isAnnouncement').checked = false;
+    }
+}
+
+function handleKeyPress(event) {
+    if (event.key === 'Enter') sendMessage();
+}
+
+initChat();
+</script>
+{% endblock %}

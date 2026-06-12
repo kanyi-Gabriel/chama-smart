@@ -12,4 +12,5 @@ urlpatterns = [
     path('loans/', views.loans_view, name='loans'),
     path('analytics/', views.analytics_view, name='analytics'),
     path('draw/', views.draw, name='draw'),
+    path('chamas/<int:chama_id>/chat/', views.chat_view, name='chat'),
 ]
